@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Full Stack Book Manager</title>
+ <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    
+    <h2>Book Database Control Panel</h2>
+
+    <form id="itemForm">
+        <input type="text" id="itemInput" placeholder="Enter book name..." required>
+        <button type="submit" id="submitBtn">Submit</button>
+        <button type="button" id="cancelEditBtn" style="display: none;">Cancel</button>
+    </form>
+     
+    <h3>Stored Books:</h3>
+    <ul id="itemList"></ul>
+
+<script>
+      const formData = document.getElementById("itemForm");
+      const ULIst = document.getElementById("itemList");
+      const submitBtn = document.getElementById("submitBtn");
+      const cancelEditBtn = document.getElementById("cancelEditBtn");
+      const inputdata = document.getElementById("itemInput");
+
+      // Global trackers to manage our UI state
+      let isEditMode = false;
+      let currentEditId = null;
+
+      // ==========================================
+      // 1. READ: FETCH AND RENDER DATA FROM DATABASE
+      // ==========================================
+      async function loadItems() {
+        try {
+            // GET request maps to: @app.route('/api/items', methods=['GET'])
+            const response = await fetch("http://127.0.0.1:5000/api/items");
+            const itemsArray = await response.json();
+            
+            // Clear out the old list layout completely
+            ULIst.innerHTML = "";
+
+            itemsArray.forEach(element => {
+                const item_row = document.createElement("li");
+
+                // Text node wrapper
+                const textSpan = document.createElement("span");
+                textSpan.textContent = element.name; 
+                
+                // Action Buttons creation
+                const deleteBtn = document.createElement("button");
+                deleteBtn.textContent = "Delete";
+                deleteBtn.className = "delete-btn";
+
+                const updateBtn = document.createElement("button");
+                updateBtn.textContent = "Update"; // Fixed the structural typo from earlier!
+                updateBtn.className = "edit-btn";
+
+                // Stitch row pieces together
+                item_row.appendChild(textSpan);
+                item_row.appendChild(updateBtn);
+                item_row.appendChild(deleteBtn);
+                ULIst.appendChild(item_row);
+
+                // ------------------------------------------
+                // A. ACTION LISTENER: DELETE AN ELEMENT
+                // ------------------------------------------
+                deleteBtn.addEventListener("click", async function() {
+                    try {
+                        // Maps to: @app.route('/api/tasks/<int:task_id>', methods=['DELETE'])
+                        const response = await fetch(`http://127.0.0.1:5000/api/tasks/${element.id}`, {
+                            method: "DELETE"
+                        });
+                        
+                        await response.json();
+                        loadItems(); // Instantly refresh layout feed
+                    } catch (error) {
+                        console.error("Failed to delete task:", error);
+                    }
+                });
+
+                // ------------------------------------------
+                // B. ACTION LISTENER: PREPARE ELEMENT FOR UPDATE
+                // ------------------------------------------
+                updateBtn.addEventListener("click", function() {
+                    isEditMode = true;
+                    currentEditId = element.id;
+
+                    // Populate form fields with selected rows data properties
+                    inputdata.value = element.name;
+                    inputdata.focus();
+
+                    // Alter buttons to notify user of state change
+                    submitBtn.textContent = "Save Changes";
+                    submitBtn.classList.add("update-mode");
+                    cancelEditBtn.style.display = "inline-block";
+                });
+            });
+
+        } catch (error) {
+            console.error("Error loading application layout rows:", error);
+        }
+      }
+
+      // ==========================================
+      // 2. HELPER: RESET FORM BACK TO CREATION MODE
+      // ==========================================
+      function resetForm() {
+          isEditMode = false;
+          currentEditId = null;
+          inputdata.value = "";
+          submitBtn.textContent = "Submit";
+          submitBtn.classList.remove("update-mode");
+          cancelEditBtn.style.display = "none";
+      }
+
+      cancelEditBtn.addEventListener("click", resetForm);
+
+      // Initialize dataset layout view automatically on screen boot
+      loadItems();
+
+      // ==========================================
+      // 3. WRITE: CREATE OR UPDATE LOGIC ROUTER
+      // ==========================================
+      formData.addEventListener("submit", async function(event) { 
+        event.preventDefault();
+        let values = inputdata.value;
+
+        // Configuration defaults configured for adding items
+        // Maps to: @app.route('/api/items', methods=['POST'])
+        let targetUrl = "http://127.0.0.1:5000/api/items";
+        let httpMethod = "POST";
+
+        // If the system state engine flags an active edit sequence: Swap targets!
+        if (isEditMode) {
+            // Maps to: @app.route('/api/update/<int:task_id>', methods=['PUT'])
+            targetUrl = `http://127.0.0.1:5000/api/update/${currentEditId}`;
+            httpMethod = "PUT";
+        }
+
+        try {
+            const response = await fetch(targetUrl, {
+                method: httpMethod,
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    name: values
+                })
+            });
+
+            await response.json();
+            resetForm();   // Revert field forms back to original state 
+            loadItems();   // Pull a clean updated database copy
+        } catch (error) {
+            console.error("Network interface submittal failure:", error);
+        }
+     });
+</script>
+</body>
+</html>
